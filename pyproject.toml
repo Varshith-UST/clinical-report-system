@@ -1,9 +1,9 @@
 [project]
 name = "clinical-report-assistant"
 version = "0.1.0"
-description = "Add your description here"
+description = "Synthetic-data capstone for source-linked clinical report review"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "chromadb>=1.5.9",
     "crewai>=1.15.27",

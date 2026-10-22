@@ -71,6 +71,15 @@
   analysis and summary objects stay in the current Streamlit session and never
   enter a shared Streamlit cache. A report or analysis-generation context change
   clears both; a summary-generation context change clears only the summary.
+- capstone_flow.py owns CrewAI Flow orchestration around the existing three
+  agents. It resolves or generates analysis first, then overlaps Summary Agent
+  work with analysis-only local guideline retrieval using at most two workers,
+  joins both branches, rechecks the guideline fingerprint, and only then
+  resolves or generates recommendations. It records explicit reuse, generate,
+  retrieve, abstain, await-review, reviewed, and failed routes. Workers must not
+  import Streamlit or share open SQLite/Chroma connections. A branch failure
+  must preserve any successfully persisted stage, and Flow execution never
+  performs or inherits human approval.
 - `persistence.py` owns local SQLite storage for successfully validated analysis
   and summary results, validated recommendation drafts, and exact-draft review
   decisions. Reports are identified only by the SHA-256 of uploaded
@@ -97,6 +106,9 @@
   and never establish clinical certification.
 - `tests/` uses synthetic data only. Generate PDF fixtures in memory and never
   add real clinical documents.
+- scripts/run_offline_workflow_demo.py is a clearly labeled mocked-boundary
+  demo. It uses temporary SQLite and Chroma storage, deterministic fake
+  embeddings, no API key, no model download, and no network calls.
 
 ## Privacy and safety
 

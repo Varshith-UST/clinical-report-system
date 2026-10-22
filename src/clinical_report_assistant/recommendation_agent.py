@@ -653,6 +653,52 @@ def build_retrieval_queries(
     return list(dict.fromkeys(queries))[:max_queries]
 
 
+def build_analysis_retrieval_queries(
+    analysis: ReportAnalysisResult,
+    *,
+    max_queries: int = DEFAULT_MAX_RETRIEVAL_QUERIES,
+) -> list[str]:
+    """Build deterministic retrieval queries without requiring a summary.
+
+    This contract lets local retrieval run concurrently with Summary Agent
+    generation. Only validated patient findings and uncertainty reasons are used.
+    """
+
+    if not 1 <= max_queries <= 5:
+        raise ValueError("max_queries must be between 1 and 5.")
+    uncertainty_terms = [
+        item.name + ": " + "; ".join(item.review_reasons[:2])
+        for item in analysis.findings
+        if item.review_reasons
+    ]
+    uncertainty_terms.extend(
+        item.category.value + ": " + item.status.value
+        for item in analysis.narrative_findings
+        if item.status is not NarrativeStatus.REPORTED
+    )
+    groups = (
+        [
+            item.name
+            for item in analysis.findings
+            if item.assessment
+            in {FindingAssessment.ABOVE_RANGE, FindingAssessment.BELOW_RANGE}
+        ],
+        uncertainty_terms,
+    )
+    queries: list[str] = []
+    for names in groups:
+        unique = list(dict.fromkeys(name.strip() for name in names if name.strip()))
+        if unique:
+            queries.append(
+                ("review follow-up guidance for " + ", ".join(unique[:12]))[:800]
+            )
+    if not queries:
+        categories = [item.category.value for item in analysis.narrative_findings]
+        fallback = ", ".join(dict.fromkeys(categories)) or "documented findings"
+        queries.append(("review follow-up guidance for " + fallback)[:800])
+    return list(dict.fromkeys(queries))[:max_queries]
+
+
 # Recommendation evidence helpers are defined below.
 
 

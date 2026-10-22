@@ -5,6 +5,11 @@ from __future__ import annotations
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 
+from clinical_report_assistant.capstone_flow import (
+    CapstoneWorkflowResult,
+    ClinicalReportFlow,
+    retrieve_guideline_snapshot,
+)
 from clinical_report_assistant.config import load_gemini_config
 from clinical_report_assistant.guideline_kb import (
     GuidelineKnowledgeBase,
@@ -62,6 +67,7 @@ from clinical_report_assistant.session_state import (
     REPORT_SUMMARY_RESULT_KEY,
     REPORT_SUMMARY_REUSED_KEY,
     clear_analysis_result,
+    clear_recommendation_result,
     clear_summary_result,
     synchronize_analysis_context,
     synchronize_recommendation_context,
@@ -121,6 +127,29 @@ def remember_recommendation(resolution: RecommendationResolution) -> None:
     st.session_state[REPORT_RECOMMENDATION_RESULT_KEY] = resolution.record.result
     st.session_state[REPORT_RECOMMENDATION_REUSED_KEY] = resolution.reused
     st.session_state.pop(REPORT_RECOMMENDATION_REVIEW_KEY, None)
+
+
+def remember_workflow_result(result: CapstoneWorkflowResult) -> None:
+    """Apply only successful Flow stages and retain prior valid later stages."""
+
+    if result.analysis is not None:
+        previous = st.session_state.get(REPORT_ANALYSIS_RECORD_KEY)
+        if (
+            isinstance(previous, SavedAnalysisRecord)
+            and previous.record_id != result.analysis.record.record_id
+        ):
+            clear_summary_result(st.session_state)
+        remember_analysis(result.analysis)
+    if result.summary is not None:
+        previous = st.session_state.get(REPORT_SUMMARY_RECORD_KEY)
+        if (
+            isinstance(previous, SavedSummaryRecord)
+            and previous.record_id != result.summary.record.record_id
+        ):
+            clear_recommendation_result(st.session_state)
+        remember_summary(result.summary)
+    if result.recommendation is not None:
+        remember_recommendation(result.recommendation)
 
 
 def display_saved_status(
@@ -570,6 +599,113 @@ if document is not None:
                                 reused=True,
                             )
                         )
+
+            st.markdown("#### Complete the remaining workflow")
+            st.caption(
+                "Run remaining workflow resolves compatible saved stages first. "
+                "After analysis, Summary Agent generation and local guideline "
+                "retrieval can overlap; recommendation waits for both. This button "
+                "may consume Gemini quota, but never runs automatically."
+            )
+            if st.button(
+                "Run remaining workflow",
+                key=f"run-remaining-workflow-{document_identity}",
+            ):
+                with st.spinner(
+                    "Resolving analysis, summary, guideline retrieval, and draft..."
+                ):
+                    try:
+                        initial_kb = GuidelineKnowledgeBase()
+                        initial_index = initial_kb.index_fingerprint()
+                        flow_recommendation_settings = (
+                            recommendation_generation_settings(
+                                config,
+                                guideline_index_fingerprint=(
+                                    initial_index.fingerprint
+                                ),
+                                guideline_document_hashes=(
+                                    initial_index.document_hashes
+                                ),
+                            )
+                        )
+
+                        def retrieve_for_flow(
+                            validated_analysis: ReportAnalysisResult,
+                        ):
+                            worker_kb = GuidelineKnowledgeBase()
+                            try:
+                                return retrieve_guideline_snapshot(
+                                    validated_analysis,
+                                    worker_kb,
+                                    top_k=(
+                                        flow_recommendation_settings.retrieval_top_k
+                                    ),
+                                    max_queries=(
+                                        flow_recommendation_settings.max_retrieval_queries
+                                    ),
+                                )
+                            finally:
+                                worker_kb.close()
+
+                        flow = ClinicalReportFlow(
+                            database_path=result_store.path,
+                            report_hash=document_identity,
+                            analysis_settings=analysis_settings,
+                            summary_settings=summary_generation_settings(config),
+                            recommendation_settings=(
+                                flow_recommendation_settings
+                            ),
+                            runtime_versions=result_service.runtime_versions,
+                            generate_analysis=lambda: ReportAnalysisAgent(
+                                config
+                            ).analyze(document),
+                            generate_summary=lambda validated_analysis: SummaryAgent(
+                                config
+                            ).summarize(validated_analysis),
+                            retrieve_guidelines=retrieve_for_flow,
+                            generate_recommendation=(
+                                lambda validated_analysis, validated_summary, passages: (
+                                    RecommendationAgent(config).recommend(
+                                        validated_analysis,
+                                        validated_summary,
+                                        passages,
+                                    )
+                                )
+                            ),
+                            current_index_identity=lambda: GuidelineKnowledgeBase().index_fingerprint(),
+                        )
+                        workflow_result = flow.run()
+                    except Exception as exc:  # noqa: BLE001 - sanitized below
+                        st.error(safe_recommendation_error_message(exc))
+                    else:
+                        remember_workflow_result(workflow_result)
+                        route_text = " -> ".join(
+                            f"{item.stage}:{item.route.value}"
+                            for item in workflow_result.transitions
+                        )
+                        if route_text:
+                            st.caption(f"Workflow route: {route_text}")
+                        if workflow_result.failure is not None:
+                            st.error(
+                                "Workflow stopped at "
+                                f"{workflow_result.failure.stage} "
+                                f"({workflow_result.failure.category}): "
+                                f"{workflow_result.failure.message}"
+                            )
+                        elif workflow_result.outcome.value == "abstain":
+                            st.info(
+                                "The validated draft abstained because the bounded "
+                                "guidance was not sufficient for a suggestion."
+                            )
+                        elif workflow_result.review is not None:
+                            st.success(
+                                "Reused the compatible saved workflow and its exact-"
+                                "draft human review decision."
+                            )
+                        else:
+                            st.success(
+                                "Workflow completed with a Draft / Pending review."
+                            )
 
             analysis_record = st.session_state.get(REPORT_ANALYSIS_RECORD_KEY)
             analyze_label = (

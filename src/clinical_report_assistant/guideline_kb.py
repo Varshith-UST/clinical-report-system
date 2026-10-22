@@ -149,6 +149,17 @@ class GuidelineKnowledgeBase:
             configuration=dict(self._manifest["configuration"]),
         )
 
+    def close(self) -> None:
+        """Release this instance's Chroma client, when one has been opened."""
+
+        if self._vector_store is None:
+            return
+        client = getattr(self._vector_store, "_client", None)
+        close = getattr(client, "close", None)
+        if callable(close):
+            close()
+        self._vector_store = None
+
     def index_pdf(
         self,
         uploaded_bytes: bytes,
