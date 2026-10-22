@@ -35,6 +35,27 @@ Windows 11 is the primary tested setup:
 The project supports Python 3.12 only. You do not need to install Python
 separately when uv can download its managed Python 3.12 interpreter.
 
+### Install Git and uv on Windows
+
+Open PowerShell and install Git with Windows Package Manager:
+
+    winget install --id Git.Git -e --source winget
+
+If `winget` is unavailable, use the official Git for Windows installer:
+https://git-scm.com/install/windows.
+
+Install uv with Astral's official Windows installer:
+
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+Alternatively, install uv with Windows Package Manager:
+
+    winget install --id=astral-sh.uv -e
+
+Close and reopen PowerShell after installation so its refreshed `PATH` includes
+the new commands. The official uv installation page also lists other supported
+methods: https://docs.astral.sh/uv/getting-started/installation/.
+
 Verify the tools:
 
     git --version
