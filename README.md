@@ -205,3 +205,12 @@ handoff:
 - [Development, offline demo, and fresh-clone verification](docs/development.md)
 - [Data safety, compatibility, and limitations](docs/data-safety-and-limitations.md)
 - [Project module rules](AGENTS.md)
+
+
+| Presenter | Responsibility heading | What it means |
+|---|---|---|
+| **1** | **PDF Ingestion, Data Validation and Report Analysis Agent** | Accepts a patient-report PDF, checks whether it is readable and within the size limit, and extracts text by page. The Analysis Agent identifies findings and compares numeric values against reference ranges supplied in the report. |
+| **2** | **Guideline Processing, Embeddings and ChromaDB Retrieval** | Prepares reference PDFs and splits them into smaller passages. Embeddings represent their meaning as numbers; ChromaDB stores them so the application can retrieve relevant guidance with document and page references. |
+| **3** | **Summary Agent, Evidence Validation and Summary Presentation** | Converts validated analysis into a concise summary of important findings, repeat measurements, and uncertainties. Keeps facts linked to their evidence and makes full details expandable. |
+| **4** | **Recommendation Agent, Source Citations and Human Approval** | Uses patient findings and retrieved guidance to draft review suggestions. Abstains when guidance is insufficient. A person approves or rejects the exact draft; editing creates a new version requiring review. |
+| **5** | **CrewAI Workflow, Parallel Execution, SQLite Persistence and Integration** | Connects the three agents and routes the workflow. Runs summary generation and guideline retrieval concurrently after analysis. SQLite saves validated results and review decisions so compatible results reload without repeating Gemini calls. |
