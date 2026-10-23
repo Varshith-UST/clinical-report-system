@@ -17,12 +17,12 @@ wheels/
 secrets.toml
 
 # Uploaded documents and generated outputs
-uploads/
-documents/
-outputs/
-generated/
-reports/
-*.pdf
+# uploads/
+# documents/
+# outputs/
+# generated/
+# reports/
+# *.pdf
 
 # Local databases and vector stores
 *.db
